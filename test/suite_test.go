@@ -250,12 +250,12 @@ func panicCheck(con string) (bool, error) {
 }
 
 var _ = ginkgo.AfterSuite(func() {
-	if host != nil {
+	if host != nil && host.Process != nil {
 		if err := host.Process.Kill(); err != nil {
 			log.Error(err)
 		}
 	}
-	if client != nil {
+	if client != nil && client.Process != nil {
 		if err := client.Process.Kill(); err != nil {
 			log.Error(err)
 		}
