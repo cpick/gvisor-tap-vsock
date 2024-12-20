@@ -1,4 +1,5 @@
-./bin/
+/bin/
 capture.pcap
 tmp/
+test/ovmf_vars.fd
 test/qcon.log
