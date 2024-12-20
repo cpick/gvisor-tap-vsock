@@ -5,6 +5,7 @@ type TransportProtocol string
 const (
 	UDP   TransportProtocol = "udp"
 	TCP   TransportProtocol = "tcp"
+	TCPFD TransportProtocol = "tcpfd"
 	UNIX  TransportProtocol = "unix"
 	NPIPE TransportProtocol = "npipe"
 )

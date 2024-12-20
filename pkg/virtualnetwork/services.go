@@ -113,6 +113,10 @@ func forwardHostVM(configuration *types.Configuration, s *stack.Stack) (http.Han
 			if err := fw.Expose(types.UDP, strings.TrimPrefix(local, "udp:"), remote); err != nil {
 				return nil, err
 			}
+		} else if strings.HasPrefix(local, "tcpfd:") {
+			if err := fw.Expose(types.TCPFD, strings.TrimPrefix(local, "tcpfd:"), remote); err != nil {
+				return nil, err
+			}
 		} else {
 			if err := fw.Expose(types.TCP, local, remote); err != nil {
 				return nil, err

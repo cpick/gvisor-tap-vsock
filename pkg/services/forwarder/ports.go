@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/containers/gvisor-tap-vsock/pkg/sshclient"
 	"github.com/containers/gvisor-tap-vsock/pkg/tcpproxy"
@@ -68,8 +69,10 @@ func NewPortsForwarder(s *stack.Stack) *PortsForwarder {
 func (f *PortsForwarder) Expose(protocol types.TransportProtocol, local, remote string) error {
 	f.proxiesLock.Lock()
 	defer f.proxiesLock.Unlock()
-	if _, ok := f.proxies[local]; ok {
-		return errors.New("proxy already running")
+	if protocol != types.TCPFD {
+		if _, ok := f.proxies[local]; ok {
+			return errors.New("proxy already running")
+		}
 	}
 
 	switch protocol {
@@ -223,13 +226,64 @@ func (f *PortsForwarder) Expose(protocol types.TransportProtocol, local, remote 
 			Remote:     remote,
 			underlying: p,
 		}
-	case types.TCP:
+	case types.TCP, types.TCPFD:
 		address, err := tcpipAddress(1, remote)
 		if err != nil {
 			return err
 		}
 
 		var p tcpproxy.Proxy
+		if protocol == types.TCPFD {
+			p.ListenFunc = func(_, fd string) (net.Listener, error) {
+				// client/caller retains ownership of original file descriptor
+
+				fdInt, err := strconv.Atoi(fd)
+				if err != nil || fdInt < 0 {
+					return nil, fmt.Errorf("unparsable file descriptor: %q", fd)
+				}
+
+				// create a duplicate file descriptor that `NewFile()` can take ownership of
+				syscall.ForkLock.RLock()
+				fdDup, err := syscall.Dup(fdInt)
+				if err != nil {
+					syscall.ForkLock.RUnlock()
+					return nil, fmt.Errorf("duplicating file descriptor: %v failed: %q", fdInt, err)
+				}
+				syscall.CloseOnExec(fdDup)
+				syscall.ForkLock.RUnlock()
+
+				// create File that owns duplicate file descriptor
+				f := os.NewFile(uintptr(fdDup), "")
+				if f == nil {
+					_ = syscall.Close(fdDup)
+					return nil, fmt.Errorf("invalid duplicate file descriptor: %v", fdDup)
+				}
+				defer f.Close()
+
+				// create Listener
+				l, err := net.FileListener(f)
+				if err != nil {
+					return nil, fmt.Errorf("file listener failed: %w", err)
+				}
+				tl, ok := l.(*net.TCPListener)
+				if !ok {
+					return nil, errors.New("not TCP listener")
+				}
+
+				// derive unique local from final file descriptor
+				rc, err := tl.SyscallConn()
+				if err != nil {
+					return nil, fmt.Errorf("failed to get raw connection: %w", err)
+				}
+				if err := rc.Control(func(fd uintptr) {
+					local = strconv.Itoa(int(fd))
+				}); err != nil {
+					return nil, fmt.Errorf("failed to control raw connection: %w", err)
+				}
+
+				return tl, nil
+			}
+		}
 		p.AddRoute(local, &tcpproxy.DialProxy{
 			Addr: remote,
 			DialContext: func(ctx context.Context, _, _ string) (conn net.Conn, e error) {
@@ -245,7 +299,7 @@ func (f *PortsForwarder) Expose(protocol types.TransportProtocol, local, remote 
 			}
 		}()
 		f.proxies[key(protocol, local)] = proxy{
-			Protocol:   "tcp",
+			Protocol:   string(protocol),
 			Local:      local,
 			Remote:     remote,
 			underlying: &p,
