@@ -34,6 +34,10 @@ type Configuration struct {
 	// Port forwarding between the machine running the gateway and the virtual network.
 	Forwards map[string]string
 
+	// Transport protocols that may be forwarded.
+	// Defaults to: `DefaultTransportProtocols()` if `nil`.
+	ForwardProtocols TransportProtocols
+
 	// Address translation of incoming traffic.
 	// Useful for reaching the host itself (localhost) from the virtual network.
 	NAT map[string]string

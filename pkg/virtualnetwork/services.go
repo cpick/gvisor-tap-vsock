@@ -107,7 +107,7 @@ func dhcpServer(configuration *types.Configuration, s *stack.Stack, ipPool *tap.
 }
 
 func forwardHostVM(configuration *types.Configuration, s *stack.Stack) (http.Handler, error) {
-	fw := forwarder.NewPortsForwarder(s)
+	fw := forwarder.NewPortsForwarder(s, configuration.ForwardProtocols)
 	for local, remote := range configuration.Forwards {
 		if strings.HasPrefix(local, "udp:") {
 			if err := fw.Expose(types.UDP, strings.TrimPrefix(local, "udp:"), remote); err != nil {

@@ -31,6 +31,8 @@ type PortsForwarder struct {
 
 	proxiesLock sync.Mutex
 	proxies     map[string]proxy
+
+	protocols types.TransportProtocols
 }
 
 type proxy struct {
@@ -59,14 +61,22 @@ func (w CloseWrapper) Close() error {
 	return w()
 }
 
-func NewPortsForwarder(s *stack.Stack) *PortsForwarder {
+func NewPortsForwarder(s *stack.Stack, ps types.TransportProtocols) *PortsForwarder {
+	if ps == nil {
+		ps = types.DefaultTransportProtocols()
+	}
 	return &PortsForwarder{
-		stack:   s,
-		proxies: make(map[string]proxy),
+		stack:     s,
+		proxies:   make(map[string]proxy),
+		protocols: ps,
 	}
 }
 
 func (f *PortsForwarder) Expose(protocol types.TransportProtocol, local, remote string) error {
+	if _, ok := f.protocols[protocol]; !ok {
+		return fmt.Errorf("protocol: %v not enabled", protocol)
+	}
+
 	f.proxiesLock.Lock()
 	defer f.proxiesLock.Unlock()
 	if protocol != types.TCPFD {
